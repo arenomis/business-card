@@ -67,6 +67,22 @@ function isSmtpConfigured() {
   );
 }
 
+/** Текст для заявителя в API (без дублирования «проверьте спам» там, где дело в сети/хостинге). */
+function humanizeApplicantSmtpErrorForClient(raw) {
+  const s = String(raw || '');
+  if (/connection timeout|connect timeout|timed out|ETIMEDOUT|timeout/i.test(s)) {
+    const gmail = /gmail\.com/i.test(trimEnv(process.env.SMTP_HOST) || '');
+    if (gmail) {
+      return 'не удалось подключиться к Gmail (SMTP) за отведённое время — с облака Google часто блокирует или не отвечает. Владельцу сайта: в Render задайте Brevo — хост smtp-relay.brevo.com, SMTP_USER и SMTP_PASS из раздела SMTP & API в brevo.com; либо подтвердите домен в resend.com и RESEND_FROM с этого домена.';
+    }
+    return 'таймаут при подключении к SMTP. Проверьте SMTP_HOST, порт и файрвол; для продакшена удобнее Brevo (smtp-relay.brevo.com).';
+  }
+  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(s)) {
+    return 'почтовый сервер SMTP недоступен по сети. Проверьте SMTP_HOST и DNS.';
+  }
+  return s;
+}
+
 let warnedGmailSmtpFromCloud = false;
 
 function createTransporter() {
@@ -93,9 +109,9 @@ function createTransporter() {
     requireTLS: trimEnv(process.env.SMTP_SECURE) !== 'true',
     auth: { user, pass },
     tls: { rejectUnauthorized: true },
-    connectionTimeout: 12_000,
-    greetingTimeout: 12_000,
-    socketTimeout: 20_000,
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 25_000,
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 25_000,
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 40_000,
   });
 }
 
@@ -169,7 +185,7 @@ async function notifyOwnerApplicantCopySmtpFailed(data, reason) {
 
 /** Копия заявителю по SMTP в том же запросе (надёжнее, чем фон после HTTP). Таймаут — чтобы не висеть вечно и не ловить 502 на Render. */
 async function trySendApplicantCopyViaSmtp(data) {
-  const ms = Number(process.env.SMTP_APPLICANT_COPY_TIMEOUT_MS) || 22_000;
+  const ms = Number(process.env.SMTP_APPLICANT_COPY_TIMEOUT_MS) || 48_000;
   let timer;
   const deadline = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(`SMTP: таймаут ${ms} мс`)), ms);
@@ -179,14 +195,14 @@ async function trySendApplicantCopyViaSmtp(data) {
     console.info('[mail] applicant copy SMTP OK →', data.email);
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof AppError ? e.message : e?.message || String(e);
-    console.error('[mail] applicant copy SMTP FAIL →', data.email, msg);
+    const raw = e instanceof AppError ? e.message : e?.message || String(e);
+    console.error('[mail] applicant copy SMTP FAIL →', data.email, raw);
     try {
-      await notifyOwnerApplicantCopySmtpFailed(data, msg);
+      await notifyOwnerApplicantCopySmtpFailed(data, raw);
     } catch (e2) {
       console.error('[mail] Resend alert to owner failed:', e2?.message || e2);
     }
-    return { ok: false, error: msg };
+    return { ok: false, error: humanizeApplicantSmtpErrorForClient(raw) };
   } finally {
     clearTimeout(timer);
   }

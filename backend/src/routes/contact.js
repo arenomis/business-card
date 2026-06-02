@@ -7,7 +7,7 @@ function buildContactMessage(result) {
   if (result.transport === 'resend' || result.transport === 'smtp') {
     if (result.applicantCopyFailed) {
       const err = result.applicantCopyError || 'ошибка SMTP';
-      return `Заявка доставлена владельцу. Копия на ваш email не отправилась: ${err}. Проверьте «Спам». Владельцу сайта: с сервера часто не работает Gmail — лучше Brevo (smtp-relay.brevo.com) или свой домен в Resend.`;
+      return `Заявка доставлена владельцу. Копия на ваш email не отправилась: ${err}`;
     }
     return 'Сообщение отправлено. Письмо с заявкой — владельцу, копия — на указанный вами email. Проверьте «Входящие» и «Спам».';
   }

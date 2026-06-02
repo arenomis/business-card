@@ -12,7 +12,7 @@ export class ApiService {
 
   sendContact(data: ContactFormData): Observable<ContactResponse> {
     return this.http.post<ContactResponse>(`${this.baseUrl}/contact`, data).pipe(
-      timeout(40_000),
+      timeout(62_000),
       catchError((err: unknown) => {
         if (err instanceof TimeoutError) {
           return throwError(() => ({
