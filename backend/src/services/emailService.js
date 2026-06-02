@@ -167,21 +167,29 @@ async function notifyOwnerApplicantCopySmtpFailed(data, reason) {
   }
 }
 
-function buildRunApplicantCopyAfterResponse(data) {
-  return async () => {
+/** Копия заявителю по SMTP в том же запросе (надёжнее, чем фон после HTTP). Таймаут — чтобы не висеть вечно и не ловить 502 на Render. */
+async function trySendApplicantCopyViaSmtp(data) {
+  const ms = Number(process.env.SMTP_APPLICANT_COPY_TIMEOUT_MS) || 22_000;
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`SMTP: таймаут ${ms} мс`)), ms);
+  });
+  try {
+    await Promise.race([sendApplicantCopyOnlyViaSmtp(data), deadline]);
+    console.info('[mail] applicant copy SMTP OK →', data.email);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof AppError ? e.message : e?.message || String(e);
+    console.error('[mail] applicant copy SMTP FAIL →', data.email, msg);
     try {
-      await sendApplicantCopyOnlyViaSmtp(data);
-      console.info('[mail] applicant copy SMTP OK →', data.email);
-    } catch (e) {
-      const msg = e instanceof AppError ? e.message : e?.message || String(e);
-      console.error('[mail] applicant copy SMTP FAIL →', data.email, msg);
-      try {
-        await notifyOwnerApplicantCopySmtpFailed(data, msg);
-      } catch (e2) {
-        console.error('[mail] Resend alert to owner failed:', e2?.message || e2);
-      }
+      await notifyOwnerApplicantCopySmtpFailed(data, msg);
+    } catch (e2) {
+      console.error('[mail] Resend alert to owner failed:', e2?.message || e2);
     }
-  };
+    return { ok: false, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Отправка через Resend — один API-ключ, без SMTP-пароля почты (удобно для Gmail). */
@@ -255,13 +263,13 @@ async function sendViaResend(data) {
     return { mocked: false, transport: 'resend' };
   }
 
-  // Копию заявителю — SMTP после ответа HTTP (contact.js + следующий тик), иначе 502 на Render.
   if (isSmtpConfigured()) {
+    const copy = await trySendApplicantCopyViaSmtp(data);
     return {
       mocked: false,
       transport: 'resend',
-      applicantCopyDeferred: true,
-      runApplicantCopyAfterResponse: buildRunApplicantCopyAfterResponse(data),
+      applicantCopyFailed: !copy.ok,
+      applicantCopyError: copy.error || '',
     };
   }
 
@@ -273,14 +281,6 @@ async function sendViaResend(data) {
       ownerEmail
     );
   } catch (err) {
-    if (isResendTestingRecipientError(err.message) && isSmtpConfigured()) {
-      return {
-        mocked: false,
-        transport: 'resend',
-        applicantCopyDeferred: true,
-        runApplicantCopyAfterResponse: buildRunApplicantCopyAfterResponse(data),
-      };
-    }
     if (isResendTestingRecipientError(err.message)) {
       throw new AppError(
         'Копия на ваш email с тестового Resend (onboarding@resend.dev) недоступна. Сделайте одно: 1) подтвердите домен в https://resend.com/domains и укажите RESEND_FROM с него; 2) либо задайте рабочий SMTP (лучше Brevo: smtp-relay.brevo.com + SMTP-ключ в SMTP_PASS, логин в SMTP_USER по инструкции Brevo).',
