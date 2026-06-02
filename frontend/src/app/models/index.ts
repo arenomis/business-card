@@ -11,6 +11,7 @@ export interface ContactResponse {
   mocked?: boolean;
   ethereal?: boolean;
   transport?: string;
+  applicantCopyFailed?: boolean;
   details?: { field: string; message: string }[];
 }
 

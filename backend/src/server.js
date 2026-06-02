@@ -3,6 +3,7 @@
  * Статику Angular отдаём только если SERVE_STATIC=true (после npm run build во frontend).
  */
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
@@ -14,8 +15,12 @@ import { aiRouter } from './routes/ai.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// override: false — переменные с хостинга (Render) не перезатираются пустыми ключами из .env
-dotenv.config({ path: path.join(__dirname, '..', '.env'), override: false });
+const envPath = path.join(__dirname, '..', '.env');
+// Локально: .env перезаписывает пустые переменные из окружения (иначе пустой RESEND_* в системе блокирует ключ из файла).
+// На хостинге файла .env обычно нет — остаются только переменные из панели.
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath, override: true });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;

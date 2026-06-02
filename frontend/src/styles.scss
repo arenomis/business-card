@@ -112,6 +112,12 @@ body {
     border: 1px solid rgb(239 68 68 / 30%);
     color: #fca5a5;
   }
+
+  &--warning {
+    background: rgb(234 179 8 / 12%);
+    border: 1px solid rgb(234 179 8 / 35%);
+    color: #fde047;
+  }
 }
 
 .spinner {

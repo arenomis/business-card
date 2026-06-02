@@ -36,7 +36,9 @@ function buildUserCopyHtml({ name, comment }) {
 }
 
 function isResendTestingRecipientError(message) {
-  return /only send testing emails|verify a domain/i.test(String(message || ''));
+  return /only send testing|verify a domain|not authorized to send|invalid_recipients|rejected|can only send testing/i.test(
+    String(message || ''),
+  );
 }
 
 function escapeHtml(text) {
@@ -73,6 +75,9 @@ function createTransporter() {
     requireTLS: trimEnv(process.env.SMTP_SECURE) !== 'true',
     auth: { user, pass },
     tls: { rejectUnauthorized: true },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 25_000,
   });
 }
 
@@ -123,25 +128,39 @@ async function sendViaResend(data) {
   }
 
   const sendOne = async (to, subject, html, replyTo) => {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html,
-        ...(replyTo
-          ? {
-              reply_to:
-                typeof replyTo === 'string' ? [replyTo] : Array.isArray(replyTo) ? replyTo : [String(replyTo)],
-            }
-          : {}),
-      }),
-    });
+    const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 20_000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    let res;
+    try {
+      res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: Array.isArray(to) ? to : [to],
+          subject,
+          html,
+          ...(replyTo
+            ? {
+                reply_to:
+                  typeof replyTo === 'string' ? [replyTo] : Array.isArray(replyTo) ? replyTo : [String(replyTo)],
+              }
+            : {}),
+        }),
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        throw new Error(`Resend: нет ответа за ${ms} мс (проверьте сеть или таймаут).`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(body.message || body.name || `Resend HTTP ${res.status}`);
@@ -167,10 +186,21 @@ async function sendViaResend(data) {
     return { mocked: false, transport: 'resend' };
   }
 
-  // Копию заявителю надёжнее слать через SMTP (Gmail/Brevo): Resend с тестового from не шлёт на чужие ящики.
+  // Копию заявителю — через SMTP: Resend с onboarding@resend.dev на чужие ящики не шлёт.
   if (isSmtpConfigured()) {
-    await sendApplicantCopyOnlyViaSmtp(data);
-    return { mocked: false, transport: 'resend' };
+    try {
+      await sendApplicantCopyOnlyViaSmtp(data);
+      return { mocked: false, transport: 'resend' };
+    } catch (e) {
+      const detail = e instanceof AppError ? e.message : String(e.message || e);
+      console.error('[mail] копия заявителю через SMTP не ушла:', detail);
+      return {
+        mocked: false,
+        transport: 'resend',
+        applicantCopyFailed: true,
+        applicantCopyError: detail,
+      };
+    }
   }
 
   try {
@@ -182,13 +212,24 @@ async function sendViaResend(data) {
     );
   } catch (err) {
     if (isResendTestingRecipientError(err.message) && isSmtpConfigured()) {
-      await sendApplicantCopyOnlyViaSmtp(data);
-      return { mocked: false, transport: 'resend' };
+      try {
+        await sendApplicantCopyOnlyViaSmtp(data);
+        return { mocked: false, transport: 'resend' };
+      } catch (e2) {
+        const detail = e2 instanceof AppError ? e2.message : String(e2.message || e2);
+        console.error('[mail] копия заявителю (fallback SMTP) не ушла:', detail);
+        return {
+          mocked: false,
+          transport: 'resend',
+          applicantCopyFailed: true,
+          applicantCopyError: detail,
+        };
+      }
     }
     if (isResendTestingRecipientError(err.message)) {
       throw new AppError(
-        'Resend в тестовом режиме не шлёт на чужие адреса. Выберите один вариант: 1) подтвердите домен https://resend.com/domains и укажите RESEND_FROM с этого домена; 2) добавьте SMTP от Brevo (smtp-relay.brevo.com) в .env — тогда копия заявителю уйдёт автоматически через SMTP.',
-        503
+        'Копия на ваш email с тестового Resend (onboarding@resend.dev) недоступна. Сделайте одно: 1) подтвердите домен в https://resend.com/domains и укажите RESEND_FROM с него; 2) либо задайте рабочий SMTP (лучше Brevo: smtp-relay.brevo.com + SMTP-ключ в SMTP_PASS, логин в SMTP_USER по инструкции Brevo).',
+        503,
       );
     }
     throw err;
@@ -275,7 +316,7 @@ export async function sendContactEmails(data) {
   }
 
   throw new AppError(
-    'Почта не настроена: добавьте RESEND_API_KEY в backend/.env (рекомендуется) или укажите SMTP_HOST, SMTP_USER и SMTP_PASS. Для отладки: EMAIL_DEV_MOCK=true.',
+    'Почта не настроена: задайте RESEND_API_KEY или SMTP_HOST, SMTP_USER и SMTP_PASS (в backend/.env локально или в переменных окружения на сервере). Для отладки: EMAIL_DEV_MOCK=true.',
     503
   );
 }

@@ -27,8 +27,13 @@
       </aside>
 
       @if (status() === 'success') {
-        <div class="contact__form card alert alert--success" role="status">
-          <h3>Сообщение отправлено!</h3>
+        <div
+          class="contact__form card alert"
+          [class.alert--success]="!applicantCopyFailed()"
+          [class.alert--warning]="applicantCopyFailed()"
+          role="status"
+        >
+          <h3>{{ applicantCopyFailed() ? 'Заявка принята' : 'Сообщение отправлено!' }}</h3>
           <p>{{ successMessage() || 'Спасибо за обращение!' }}</p>
           <button class="btn btn--ghost" type="button" (click)="resetForm()">
             Отправить ещё

@@ -23,6 +23,7 @@ export class ContactFormComponent {
   readonly serverError = signal('');
   readonly serverDetails = signal<{ field: string; message: string }[]>([]);
   readonly successMessage = signal('');
+  readonly applicantCopyFailed = signal(false);
 
   readonly form: FormGroup = this.fb.group({
     name: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
@@ -60,6 +61,7 @@ export class ContactFormComponent {
     this.form.markAllAsTouched();
     this.serverError.set('');
     this.serverDetails.set([]);
+    this.applicantCopyFailed.set(false);
 
     if (this.form.invalid) return;
 
@@ -73,6 +75,7 @@ export class ContactFormComponent {
     }).subscribe({
       next: (res) => {
         this.successMessage.set(res.message);
+        this.applicantCopyFailed.set(Boolean(res.applicantCopyFailed));
         this.status.set('success');
         this.form.reset();
       },
@@ -91,5 +94,6 @@ export class ContactFormComponent {
     this.serverError.set('');
     this.serverDetails.set([]);
     this.successMessage.set('');
+    this.applicantCopyFailed.set(false);
   }
 }

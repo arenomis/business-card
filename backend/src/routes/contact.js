@@ -5,7 +5,11 @@ import { sendContactEmails } from '../services/emailService.js';
 
 function buildContactMessage(result) {
   if (result.transport === 'resend' || result.transport === 'smtp') {
-    return 'Сообщение отправлено. Письма ушли на почту владельца и копия — на указанный вами адрес. Проверьте папки «Входящие» и «Спам».';
+    if (result.applicantCopyFailed) {
+      const err = result.applicantCopyError || 'ошибка SMTP';
+      return `Заявка доставлена владельцу. Копия на ваш email не отправилась: ${err}. Проверьте «Спам». Владельцу сайта: с сервера часто не работает Gmail — лучше Brevo (smtp-relay.brevo.com) или свой домен в Resend.`;
+    }
+    return 'Сообщение отправлено. Письмо с заявкой — владельцу, копия — на указанный вами email. Проверьте «Входящие» и «Спам».';
   }
   if (result.mocked && result.transport === 'console') {
     return 'Заявка принята (режим разработки: данные только в консоли API). Для реальной доставки добавьте RESEND_API_KEY или SMTP.';
@@ -25,6 +29,7 @@ contactRouter.post('/', async (req, res, next) => {
       mocked: result.mocked,
       ethereal: Boolean(result.ethereal),
       transport: result.transport,
+      applicantCopyFailed: Boolean(result.applicantCopyFailed),
       message: buildContactMessage(result),
     });
   } catch (err) {
