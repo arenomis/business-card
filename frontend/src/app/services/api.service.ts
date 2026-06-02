@@ -12,7 +12,7 @@ export class ApiService {
 
   sendContact(data: ContactFormData): Observable<ContactResponse> {
     return this.http.post<ContactResponse>(`${this.baseUrl}/contact`, data).pipe(
-      timeout(32_000),
+      timeout(26_000),
       catchError((err: unknown) => {
         if (err instanceof TimeoutError) {
           return throwError(() => ({
@@ -58,7 +58,7 @@ export class ApiService {
       message = 'Слишком много запросов. Подождите немного.';
     } else if (error.status === 502) {
       message =
-        'Шлюз вернул 502: сервер не успел за отведённое время (часто Render ~30 с). Уже исправляется на стороне API — обновите страницу после деплоя.';
+        'Сервер не ответил вовремя (часто лимит Render ~30 с). Заявка владельцу могла всё равно уйти — проверьте почту. Копия: только верный SMTP-ключ Brevo в SMTP_PASS; в Render не задавайте PORT вручную.';
     }
 
     return throwError(() => ({

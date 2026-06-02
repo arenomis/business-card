@@ -6,7 +6,12 @@ import nodemailer from 'nodemailer';
 import { AppError } from '../middleware/errorHandler.js';
 
 function trimEnv(v) {
-  return typeof v === 'string' ? v.trim() : '';
+  if (typeof v !== 'string') return '';
+  let s = v.trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
 }
 
 function buildOwnerHtml({ name, surname, email, comment }) {
@@ -75,9 +80,9 @@ function createTransporter() {
     requireTLS: trimEnv(process.env.SMTP_SECURE) !== 'true',
     auth: { user, pass },
     tls: { rejectUnauthorized: true },
-    connectionTimeout: 6_000,
-    greetingTimeout: 6_000,
-    socketTimeout: 8_000,
+    connectionTimeout: 5_000,
+    greetingTimeout: 5_000,
+    socketTimeout: 6_000,
   });
 }
 
@@ -99,15 +104,7 @@ async function sendApplicantCopyOnlyViaSmtp(data) {
   const fromRaw = trimEnv(process.env.SMTP_FROM);
   const fromAddress = fromRaw || `"${ownerName}" <${smtpUser}>`;
 
-  try {
-    await transporter.verify();
-  } catch (err) {
-    throw new AppError(
-      `SMTP (копия заявителю): ${err.message}. Настройте Brevo SMTP или подтвердите домен в Resend.`,
-      503
-    );
-  }
-
+  // Без verify(): лишний round-trip к SMTP (на Render часто даёт >10 с и 502 у прокси). Ошибка — из sendMail.
   await transporter.sendMail({
     from: fromAddress,
     to: data.email,
@@ -130,7 +127,7 @@ async function sendViaResend(data) {
   }
 
   const sendOne = async (to, subject, html, replyTo) => {
-    const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 10_000;
+    const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 8_000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ms);
     let res;
@@ -252,16 +249,7 @@ async function sendViaSmtp(data) {
   const fromRaw = trimEnv(process.env.SMTP_FROM);
   const fromAddress = fromRaw || `"${ownerName}" <${smtpUser}>`;
 
-  try {
-    await transporter.verify();
-  } catch (err) {
-    console.error('SMTP verify failed:', err.message);
-    throw new AppError(
-      `SMTP: не удалось подключиться (${err.message}). Проверьте логин/пароль и хост (например Brevo: smtp-relay.brevo.com) или используйте Resend (RESEND_API_KEY).`,
-      503
-    );
-  }
-
+  // Без verify() — быстрее и ниже риск таймаута Render (~30 с на весь запрос).
   const ownerMail = {
     from: fromAddress,
     to: ownerEmail,
