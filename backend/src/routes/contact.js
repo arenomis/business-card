@@ -27,12 +27,6 @@ contactRouter.post('/', async (req, res, next) => {
     const data = contactSchema.parse(req.body);
     const result = await sendContactEmails(data);
 
-    if (typeof result.runApplicantCopyAfterResponse === 'function') {
-      res.on('finish', () => {
-        void result.runApplicantCopyAfterResponse();
-      });
-    }
-
     res.status(200).json({
       success: true,
       mocked: result.mocked,
@@ -42,6 +36,21 @@ contactRouter.post('/', async (req, res, next) => {
       applicantCopyDeferred: Boolean(result.applicantCopyDeferred),
       message: buildContactMessage(result),
     });
+
+    // SMTP-копию не await-им — иначе «вечная загрузка» при медленном/зависшем Gmail и 502 на Render.
+    // После res.json(): setImmediate + finish + таймер (один запуск, флаг ran).
+    const runApplicantCopy = result.runApplicantCopyAfterResponse;
+    if (typeof runApplicantCopy === 'function') {
+      let ran = false;
+      const run = () => {
+        if (ran) return;
+        ran = true;
+        void runApplicantCopy();
+      };
+      setImmediate(run);
+      res.once('finish', run);
+      setTimeout(run, 2_000);
+    }
   } catch (err) {
     next(err);
   }

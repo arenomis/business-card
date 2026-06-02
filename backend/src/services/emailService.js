@@ -67,11 +67,24 @@ function isSmtpConfigured() {
   );
 }
 
+let warnedGmailSmtpFromCloud = false;
+
 function createTransporter() {
   const host = trimEnv(process.env.SMTP_HOST);
   const user = trimEnv(process.env.SMTP_USER);
   const pass = trimEnv(process.env.SMTP_PASS);
   if (!host || !user || !pass) return null;
+
+  if (
+    !warnedGmailSmtpFromCloud &&
+    /gmail\.com/i.test(host) &&
+    (trimEnv(process.env.RENDER) === 'true' || trimEnv(process.env.NODE_ENV) === 'production')
+  ) {
+    warnedGmailSmtpFromCloud = true;
+    console.warn(
+      '[mail] smtp.gmail.com с облака (Render и т.п.) Google часто режет — копия заявителю может не уйти. Надёжно: Brevo smtp-relay.brevo.com или свой домен в Resend.',
+    );
+  }
 
   return nodemailer.createTransport({
     host,
@@ -80,9 +93,9 @@ function createTransporter() {
     requireTLS: trimEnv(process.env.SMTP_SECURE) !== 'true',
     auth: { user, pass },
     tls: { rejectUnauthorized: true },
-    connectionTimeout: 5_000,
-    greetingTimeout: 5_000,
-    socketTimeout: 6_000,
+    connectionTimeout: 12_000,
+    greetingTimeout: 12_000,
+    socketTimeout: 20_000,
   });
 }
 
@@ -112,6 +125,63 @@ async function sendApplicantCopyOnlyViaSmtp(data) {
     html: buildUserCopyHtml(data),
     replyTo: ownerEmail,
   });
+}
+
+/** Если SMTP-копия заявителю не ушла — письмо владельцу через Resend (чтобы не терялось молча). */
+async function notifyOwnerApplicantCopySmtpFailed(data, reason) {
+  const owner = trimEnv(process.env.OWNER_EMAIL);
+  const apiKey = trimEnv(process.env.RESEND_API_KEY);
+  if (!owner || !apiKey) return;
+
+  const from =
+    trimEnv(process.env.RESEND_FROM) || 'Developer Landing <onboarding@resend.dev>';
+  const html = `
+    <p>Копия заявителю <strong>${escapeHtml(data.email)}</strong> по SMTP не доставилась.</p>
+    <p><strong>Причина:</strong> ${escapeHtml(reason)}</p>
+    <p>Проверьте <code>SMTP_HOST</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>. С <strong>smtp.gmail.com</strong> с VPS/Render часто не работает — переключитесь на <strong>Brevo</strong> (<code>smtp-relay.brevo.com</code> + SMTP-ключ) или подтвердите домен в Resend. Ответьте заявителю вручную.</p>
+  `;
+  const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 8_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [owner],
+        subject: '[Лендинг] не удалось отправить копию заявителю (SMTP)',
+        html,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[mail] Resend alert to owner:', body.message || res.status);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildRunApplicantCopyAfterResponse(data) {
+  return async () => {
+    try {
+      await sendApplicantCopyOnlyViaSmtp(data);
+      console.info('[mail] applicant copy SMTP OK →', data.email);
+    } catch (e) {
+      const msg = e instanceof AppError ? e.message : e?.message || String(e);
+      console.error('[mail] applicant copy SMTP FAIL →', data.email, msg);
+      try {
+        await notifyOwnerApplicantCopySmtpFailed(data, msg);
+      } catch (e2) {
+        console.error('[mail] Resend alert to owner failed:', e2?.message || e2);
+      }
+    }
+  };
 }
 
 /** Отправка через Resend — один API-ключ, без SMTP-пароля почты (удобно для Gmail). */
@@ -185,16 +255,13 @@ async function sendViaResend(data) {
     return { mocked: false, transport: 'resend' };
   }
 
-  // Копию заявителю — SMTP после отправки HTTP (см. contact.js res.on('finish')), иначе 502 на Render.
+  // Копию заявителю — SMTP после ответа HTTP (contact.js + следующий тик), иначе 502 на Render.
   if (isSmtpConfigured()) {
     return {
       mocked: false,
       transport: 'resend',
       applicantCopyDeferred: true,
-      runApplicantCopyAfterResponse: () =>
-        sendApplicantCopyOnlyViaSmtp(data).catch((e) => {
-          console.error('[mail] копия после ответа клиенту:', e?.message || e);
-        }),
+      runApplicantCopyAfterResponse: buildRunApplicantCopyAfterResponse(data),
     };
   }
 
@@ -211,10 +278,7 @@ async function sendViaResend(data) {
         mocked: false,
         transport: 'resend',
         applicantCopyDeferred: true,
-        runApplicantCopyAfterResponse: () =>
-          sendApplicantCopyOnlyViaSmtp(data).catch((e) => {
-            console.error('[mail] копия после ответа (fallback):', e?.message || e);
-          }),
+        runApplicantCopyAfterResponse: buildRunApplicantCopyAfterResponse(data),
       };
     }
     if (isResendTestingRecipientError(err.message)) {

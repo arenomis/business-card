@@ -49,11 +49,13 @@ npm run start:api
 ## Почта (кратко)
 
 1. **Resend + домен** — [resend.com/domains](https://resend.com/domains), затем `RESEND_FROM` с вашего домена.
-2. **Resend + SMTP** — заявка через Resend, копия заявителю через `SMTP_*` (Gmail с паролем приложения или [Brevo](https://www.brevo.com)).
+2. **Resend + SMTP** — заявка через Resend, копия заявителю через `SMTP_*`. Gmail с домашнего ПК часто работает; **с IP облака (Render и т.д.) Google часто режет SMTP** — для хостинга надёжнее [Brevo](https://www.brevo.com) (`smtp-relay.brevo.com`) или свой домен в Resend и отправка копии тоже через Resend.
 3. Только **SMTP** — без Resend, поля в `backend/.env.example`.
 4. Отладка без отправки: `EMAIL_DEV_MOCK=true` в `backend/.env`.
 
 Подробные переменные — в `backend/.env.example`.
+
+**Форма / копия заявителю:** API сначала отвечает «успех» (чтобы не было вечной загрузки), затем в фоне шлёт копию через SMTP, если включён Resend + `onboarding@resend.dev`. На проде для копии лучше **Brevo** или **подтверждённый домен в Resend** (тогда копия уходит через Resend без отдельного SMTP).
 
 ---
 
