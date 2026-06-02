@@ -114,20 +114,6 @@ async function sendApplicantCopyOnlyViaSmtp(data) {
   });
 }
 
-/** Отложенная копия заявителю — не блокирует HTTP-ответ (лимит Render ~30 с). */
-function scheduleApplicantCopyViaSmtp(data) {
-  const run = () => {
-    sendApplicantCopyOnlyViaSmtp(data).catch((e) => {
-      console.error('[mail] отложенная копия заявителю:', e?.message || e);
-    });
-  };
-  if (typeof setImmediate !== 'undefined') {
-    setImmediate(run);
-  } else {
-    setTimeout(run, 0);
-  }
-}
-
 /** Отправка через Resend — один API-ключ, без SMTP-пароля почты (удобно для Gmail). */
 async function sendViaResend(data) {
   const apiKey = trimEnv(process.env.RESEND_API_KEY);
@@ -199,10 +185,17 @@ async function sendViaResend(data) {
     return { mocked: false, transport: 'resend' };
   }
 
-  // Копию заявителю — через SMTP в фоне, иначе Resend+SMTP часто не укладываются в лимит Render (~30 с) → 502.
+  // Копию заявителю — SMTP после отправки HTTP (см. contact.js res.on('finish')), иначе 502 на Render.
   if (isSmtpConfigured()) {
-    scheduleApplicantCopyViaSmtp(data);
-    return { mocked: false, transport: 'resend', applicantCopyDeferred: true };
+    return {
+      mocked: false,
+      transport: 'resend',
+      applicantCopyDeferred: true,
+      runApplicantCopyAfterResponse: () =>
+        sendApplicantCopyOnlyViaSmtp(data).catch((e) => {
+          console.error('[mail] копия после ответа клиенту:', e?.message || e);
+        }),
+    };
   }
 
   try {
@@ -214,8 +207,15 @@ async function sendViaResend(data) {
     );
   } catch (err) {
     if (isResendTestingRecipientError(err.message) && isSmtpConfigured()) {
-      scheduleApplicantCopyViaSmtp(data);
-      return { mocked: false, transport: 'resend', applicantCopyDeferred: true };
+      return {
+        mocked: false,
+        transport: 'resend',
+        applicantCopyDeferred: true,
+        runApplicantCopyAfterResponse: () =>
+          sendApplicantCopyOnlyViaSmtp(data).catch((e) => {
+            console.error('[mail] копия после ответа (fallback):', e?.message || e);
+          }),
+      };
     }
     if (isResendTestingRecipientError(err.message)) {
       throw new AppError(

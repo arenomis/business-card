@@ -27,6 +27,12 @@ contactRouter.post('/', async (req, res, next) => {
     const data = contactSchema.parse(req.body);
     const result = await sendContactEmails(data);
 
+    if (typeof result.runApplicantCopyAfterResponse === 'function') {
+      res.on('finish', () => {
+        void result.runApplicantCopyAfterResponse();
+      });
+    }
+
     res.status(200).json({
       success: true,
       mocked: result.mocked,

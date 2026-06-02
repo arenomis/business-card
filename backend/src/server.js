@@ -82,4 +82,17 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
+  if (serveStatic) {
+    const rk = Boolean(String(process.env.RESEND_API_KEY || '').trim());
+    const smtp = Boolean(
+      String(process.env.SMTP_HOST || '').trim() &&
+        String(process.env.SMTP_USER || '').trim() &&
+        String(process.env.SMTP_PASS || '').trim().length >= 8,
+    );
+    console.info('[boot] prod mail snapshot:', {
+      RESEND: rk,
+      SMTP_ready: smtp,
+      RENDER: process.env.RENDER === 'true',
+    });
+  }
 });
