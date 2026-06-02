@@ -118,7 +118,9 @@ function createTransporter() {
 /** Копия заявителю через SMTP (любой получатель), пока Resend на тестовом from. */
 async function sendApplicantCopyOnlyViaSmtp(data) {
   const host = trimEnv(process.env.SMTP_HOST);
-  console.info(`[mail] копия заявителю через SMTP host=${host || '(нет)'} → ${String(data.email || '').slice(0, 3)}…`);
+  const overrideTo = trimEnv(process.env.APPLICANT_COPY_OVERRIDE_EMAIL);
+  const to = overrideTo || data.email;
+  console.info(`[mail] копия заявителю через SMTP host=${host || '(нет)'} → ${to}`);
   const transporter = createTransporter();
   if (!transporter) {
     throw new AppError(
@@ -133,14 +135,19 @@ async function sendApplicantCopyOnlyViaSmtp(data) {
   const fromRaw = trimEnv(process.env.SMTP_FROM);
   const fromAddress = fromRaw || `"${ownerName}" <${smtpUser}>`;
 
+  if (overrideTo && overrideTo.toLowerCase() !== trimEnv(data.email).toLowerCase()) {
+    console.warn(`[mail] копия на override ${to} (в форме указали: ${data.email})`);
+  }
+
   // Без verify(): лишний round-trip к SMTP (на Render часто даёт >10 с и 502 у прокси). Ошибка — из sendMail.
   await transporter.sendMail({
     from: fromAddress,
-    to: data.email,
+    to,
     subject: 'Ваше сообщение получено — Алексей Ардашов',
     html: buildUserCopyHtml(data),
     replyTo: ownerEmail,
   });
+  console.info('[mail] applicant copy SMTP OK →', to);
 }
 
 /** Если SMTP-копия заявителю не ушла — письмо владельцу через Resend (чтобы не терялось молча). */
@@ -192,7 +199,6 @@ async function trySendApplicantCopyViaSmtp(data) {
   });
   try {
     await Promise.race([sendApplicantCopyOnlyViaSmtp(data), deadline]);
-    console.info('[mail] applicant copy SMTP OK →', data.email);
     return { ok: true };
   } catch (e) {
     const raw = e instanceof AppError ? e.message : e?.message || String(e);
