@@ -1,0 +1,91 @@
+<section class="section section--alt" id="contact">
+  <div class="container">
+    <app-section-title
+      label="Контакты"
+      title="Свяжитесь со мной"
+      subtitle="Оставьте заявку — письмо придёт мне и копия вам на email"
+    />
+
+    <div class="contact__layout">
+      <aside class="contact__info">
+        <div class="contact__item">
+          <span class="contact__label">Email</span>
+          <a href="mailto:ardashovaleksei@gmail.com">ardashovaleksei@gmail.com</a>
+        </div>
+        <div class="contact__item">
+          <span class="contact__label">Телефон</span>
+          <a href="tel:+79124778194">+7 (912) 477-81-94</a>
+        </div>
+        <div class="contact__item">
+          <span class="contact__label">Telegram</span>
+          <a href="https://t.me/bebemonitea" target="_blank" rel="noopener noreferrer">@bebemonitea</a>
+        </div>
+        <div class="contact__item">
+          <span class="contact__label">Локация</span>
+          <span>Увельский · Удалённо</span>
+        </div>
+      </aside>
+
+      @if (status() === 'success') {
+        <div class="contact__form card alert alert--success" role="status">
+          <h3>Сообщение отправлено!</h3>
+          <p>{{ successMessage() || 'Спасибо за обращение!' }}</p>
+          <button class="btn btn--ghost" type="button" (click)="resetForm()">
+            Отправить ещё
+          </button>
+        </div>
+      } @else {
+        <form class="contact__form card" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+          @if (status() === 'error' && serverError()) {
+            <div class="alert alert--error" role="alert">
+              {{ serverError() }}
+            </div>
+          }
+
+          <div class="form-row">
+            <div class="form-field" [class.form-field--invalid]="fieldError('name') || serverFieldError('name')">
+              <label for="name">Имя *</label>
+              <input id="name" type="text" formControlName="name" autocomplete="name" [disabled]="status() === 'loading'" />
+              @if (fieldError('name') || serverFieldError('name')) {
+                <span class="form-field__error">{{ fieldError('name') || serverFieldError('name') }}</span>
+              }
+            </div>
+
+            <div class="form-field" [class.form-field--invalid]="fieldError('surname') || serverFieldError('surname')">
+              <label for="surname">Фамилия *</label>
+              <input id="surname" type="text" formControlName="surname" autocomplete="family-name" [disabled]="status() === 'loading'" />
+              @if (fieldError('surname') || serverFieldError('surname')) {
+                <span class="form-field__error">{{ fieldError('surname') || serverFieldError('surname') }}</span>
+              }
+            </div>
+          </div>
+
+          <div class="form-field" [class.form-field--invalid]="fieldError('email') || serverFieldError('email')">
+            <label for="email">Email *</label>
+            <input id="email" type="email" formControlName="email" autocomplete="email" [disabled]="status() === 'loading'" />
+            @if (fieldError('email') || serverFieldError('email')) {
+              <span class="form-field__error">{{ fieldError('email') || serverFieldError('email') }}</span>
+            }
+          </div>
+
+          <div class="form-field" [class.form-field--invalid]="fieldError('comment') || serverFieldError('comment')">
+            <label for="comment">Комментарий *</label>
+            <textarea id="comment" formControlName="comment" rows="5" [disabled]="status() === 'loading'"></textarea>
+            @if (fieldError('comment') || serverFieldError('comment')) {
+              <span class="form-field__error">{{ fieldError('comment') || serverFieldError('comment') }}</span>
+            }
+          </div>
+
+          <button class="btn btn--primary btn--block" type="submit" [disabled]="status() === 'loading'">
+            @if (status() === 'loading') {
+              <span class="spinner spinner--sm"></span>
+              Отправка...
+            } @else {
+              Отправить сообщение
+            }
+          </button>
+        </form>
+      }
+    </div>
+  </div>
+</section>

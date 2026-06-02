@@ -1,0 +1,32 @@
+<section class="section" id="workflow">
+  <div class="container">
+    <app-section-title
+      label="Как я работаю"
+      title="Системный подход и осознанное использование AI"
+      subtitle="AI — инструмент ускорения, а не замена инженерного мышления"
+    />
+
+    <div class="workflow__grid">
+      @for (step of steps; track step.step) {
+        <article class="workflow__step card">
+          <span class="workflow__num">{{ step.step }}</span>
+          <h3>{{ step.title }}</h3>
+          <p>{{ step.description }}</p>
+        </article>
+      }
+    </div>
+
+    <div class="workflow__ai card">
+      <div class="workflow__ai-icon" aria-hidden="true">✦</div>
+      <div>
+        <h3>AI в моей работе</h3>
+        <p>
+          Использую <strong>Cursor</strong> и <strong>ChatGPT</strong> для генерации boilerplate,
+          написания документации, рефакторинга и быстрого прототипирования. Каждый AI-результат
+          проходит ручную проверку: типизация, архитектура, безопасность, UX и реальные edge-cases.
+          На лендинге ассистент используется для быстрого диалога по моему опыту и проектам.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

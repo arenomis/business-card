@@ -1,0 +1,40 @@
+<section class="section section--alt" id="projects">
+  <div class="container">
+    <app-section-title
+      label="Кейсы"
+      title="Один корпоративный продукт — разные этапы роста"
+      subtitle="Не отдельные pet-проекты, а один Angular + .NET продукт на ММК"
+    />
+
+    <div class="projects__grid projects__grid--single">
+      @for (project of projects; track project.title) {
+        <article class="projects__card card projects__card--featured">
+          <h3>{{ project.title }}</h3>
+          <p class="projects__desc">{{ project.description }}</p>
+          <p class="projects__role"><strong>Роль:</strong> {{ project.role }}</p>
+
+          @if (project.highlights?.length) {
+            <div class="projects__highlights">
+              <span class="projects__result-label">Что делал лично в этом проекте</span>
+              <ul>
+                @for (item of project.highlights; track item) {
+                  <li>{{ item }}</li>
+                }
+              </ul>
+            </div>
+          }
+
+          <div class="projects__stack">
+            @for (tech of project.stack; track tech) {
+              <span>{{ tech }}</span>
+            }
+          </div>
+          <p class="projects__result">
+            <span class="projects__result-label">Итог</span>
+            {{ project.result }}
+          </p>
+        </article>
+      }
+    </div>
+  </div>
+</section>

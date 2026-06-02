@@ -1,0 +1,57 @@
+<section class="section" id="ai">
+  <div class="container">
+    <app-section-title
+      label="Ассистент по резюме"
+      title="Спросите об опыте и проектах"
+      subtitle="Ассистент отвечает по вашему резюме, стеку и реализованным кейсам"
+    />
+
+    <div class="ai card">
+      <div class="ai__input-area">
+        <label class="sr-only" for="ai-question">Ваш вопрос</label>
+        <textarea
+          id="ai-question"
+          class="ai__textarea"
+          [(ngModel)]="question"
+          rows="3"
+          placeholder="Например: Почему тебя стоит взять на middle+?"
+          [disabled]="status() === 'loading'"
+        ></textarea>
+
+        <div class="ai__actions">
+          <button class="btn btn--primary" type="button" [disabled]="status() === 'loading'" (click)="ask()">
+            @if (status() === 'loading') {
+              <span class="spinner spinner--sm"></span>
+              Формирую ответ...
+            } @else {
+              Спросить
+            }
+          </button>
+        </div>
+
+        <div class="ai__suggestions">
+          @for (s of suggestions; track s) {
+            <button class="ai__chip" type="button" [disabled]="status() === 'loading'" (click)="ask(s)">
+              {{ s }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="ai__response" [class.ai__response--visible]="status() === 'success' || status() === 'error'">
+        @if (status() === 'success') {
+          <div class="alert alert--success">
+            <p class="ai__answer">{{ answer() }}</p>
+            <small class="ai__source">Ассистент по резюме · {{ model() || displayModel() }}</small>
+          </div>
+        }
+
+        @if (status() === 'error') {
+          <div class="alert alert--error" role="alert">
+            {{ errorMessage() }}
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</section>

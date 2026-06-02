@@ -1,0 +1,33 @@
+/** POST /api/contact — заявка с лендинга, письма владельцу и копия заявителю. */
+import { Router } from 'express';
+import { contactSchema } from '../validators/schemas.js';
+import { sendContactEmails } from '../services/emailService.js';
+
+function buildContactMessage(result) {
+  if (result.transport === 'resend' || result.transport === 'smtp') {
+    return 'Сообщение отправлено. Письма ушли на почту владельца и копия — на указанный вами адрес. Проверьте папки «Входящие» и «Спам».';
+  }
+  if (result.mocked && result.transport === 'console') {
+    return 'Заявка принята (режим разработки: данные только в консоли API). Для реальной доставки добавьте RESEND_API_KEY или SMTP.';
+  }
+  return 'Сообщение отправлено.';
+}
+
+export const contactRouter = Router();
+
+contactRouter.post('/', async (req, res, next) => {
+  try {
+    const data = contactSchema.parse(req.body);
+    const result = await sendContactEmails(data);
+
+    res.status(200).json({
+      success: true,
+      mocked: result.mocked,
+      ethereal: Boolean(result.ethereal),
+      transport: result.transport,
+      message: buildContactMessage(result),
+    });
+  } catch (err) {
+    next(err);
+  }
+});

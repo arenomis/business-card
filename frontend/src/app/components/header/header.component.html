@@ -1,0 +1,28 @@
+<header class="header" [class.header--scrolled]="scrolled()" [class.header--open]="menuOpen()">
+  <div class="container header__inner">
+    <a class="header__logo" href="#" (click)="closeMenu()">
+      <span class="header__logo-mark">AA</span>
+      <span class="header__logo-text">Ардашов Алексей</span>
+    </a>
+
+    <button
+      class="header__burger"
+      type="button"
+      [attr.aria-expanded]="menuOpen()"
+      aria-label="Меню"
+      (click)="toggleMenu()"
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
+    <nav class="header__nav" aria-label="Основная навигация">
+      @for (link of navLinks; track link.fragment) {
+        <a class="header__link" [href]="'#' + link.fragment" (click)="closeMenu()">
+          {{ link.label }}
+        </a>
+      }
+    </nav>
+  </div>
+</header>

@@ -1,0 +1,35 @@
+<section class="section section--alt" id="stack">
+  <div class="container">
+    <app-section-title
+      label="Стек"
+      title="Технологии, с которыми работаю ежедневно"
+      subtitle="Angular 11–20, TypeScript, SCSS, PrimeNG, REST API, Git, Docker"
+    />
+
+    <div class="stack__grid">
+      @for (item of items; track item.name) {
+        <div class="stack__item card">
+          <div class="stack__item-head">
+            <span class="stack__name">{{ item.name }}</span>
+            <span class="stack__category">{{ item.category }}</span>
+          </div>
+          <div class="stack__bar" role="progressbar" [attr.aria-valuenow]="item.level" aria-valuemin="0" aria-valuemax="100">
+            <div class="stack__bar-fill" [style.width.%]="item.level"></div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="stack__tags">
+      <span>JavaScript</span>
+      <span>Webpack</span>
+      <span>Vite</span>
+      <span>Figma</span>
+      <span>SQL</span>
+      <span>ASP.NET</span>
+      <span>SQL Server</span>
+      <span>Angular Material</span>
+      <span>Code Review</span>
+    </div>
+  </div>
+</section>

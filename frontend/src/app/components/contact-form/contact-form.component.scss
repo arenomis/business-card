@@ -1,0 +1,133 @@
+.contact {
+  &__layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+
+    a {
+      color: var(--color-accent-light);
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+
+    span:not(.contact__label) {
+      color: var(--color-text-muted);
+    }
+  }
+
+  &__label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  &__form {
+    h3 {
+      margin: 0 0 0.75rem;
+    }
+
+    p {
+      margin: 0 0 1.25rem;
+      color: var(--color-text-muted);
+      line-height: 1.6;
+    }
+  }
+
+  &__previews {
+    margin: 1rem 0;
+    padding: 1rem;
+    border-radius: 10px;
+    background: rgb(0 0 0 / 20%);
+    font-size: 0.9rem;
+
+    ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+    }
+
+    a {
+      color: var(--color-accent-light);
+      word-break: break-all;
+    }
+  }
+
+  @media (max-width: 768px) {
+    &__layout {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-field {
+  margin-bottom: 1rem;
+
+  label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  input,
+  textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: rgb(0 0 0 / 20%);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-accent);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &--invalid input,
+  &--invalid textarea {
+    border-color: var(--color-error);
+  }
+
+  &__error {
+    display: block;
+    margin-top: 0.375rem;
+    font-size: 0.8rem;
+    color: var(--color-error);
+  }
+}

@@ -1,0 +1,40 @@
+.about {
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  &__card {
+    h3 {
+      margin: 0 0 1rem;
+      font-size: 1.1rem;
+    }
+
+    p, ul {
+      margin: 0;
+      color: var(--color-text-muted);
+      line-height: 1.7;
+    }
+
+    ul {
+      padding-left: 1.25rem;
+
+      li + li {
+        margin-top: 0.5rem;
+      }
+    }
+  }
+
+  &__meta {
+    margin-top: 1rem !important;
+    font-size: 0.875rem;
+    color: var(--color-accent-light) !important;
+  }
+
+  @media (max-width: 960px) {
+    &__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}

@@ -1,0 +1,96 @@
+.projects {
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+
+    &--single {
+      grid-template-columns: 1fr;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+  }
+
+  &__highlights {
+    margin: 0.5rem 0 1rem;
+
+    ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+      color: var(--color-text-muted);
+      line-height: 1.7;
+
+      li + li {
+        margin-top: 0.375rem;
+      }
+    }
+  }
+
+  &__card--featured {
+    border-color: rgb(99 102 241 / 25%);
+  }
+
+  &__card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    h3 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+  }
+
+  &__desc {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+    flex: 1;
+  }
+
+  &__role {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  &__stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+
+    span {
+      padding: 0.25rem 0.625rem;
+      border-radius: 6px;
+      background: rgb(99 102 241 / 12%);
+      color: var(--color-accent-light);
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+  }
+
+  &__result {
+    margin: 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+  }
+
+  &__result-label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-accent-light);
+  }
+
+  @media (max-width: 768px) {
+    &__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
