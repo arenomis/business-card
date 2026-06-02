@@ -48,7 +48,10 @@ npm run dev:web
 
 ```bash
 npm run build
+# Windows (cmd/PowerShell):
 set SERVE_STATIC=true
+# macOS / Linux:
+# export SERVE_STATIC=true
 npm run start:api
 ```
 
