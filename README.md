@@ -6,7 +6,7 @@
 
 ---
 
-## Как запустить у себя (для проверки ТЗ)
+## Как запустить у себя
 
 Нужны **Node.js 20+** и **npm**. В корне репозитория:
 
@@ -16,55 +16,42 @@ cd business-card
 npm run install:all
 ```
 
-Создайте файл настроек API (секреты в репозиторий не попадают — `backend/.env` в `.gitignore`):
+Создайте `backend/.env` из примера:
 
-- скопируйте `backend/.env.example` → `backend/.env`  
-  (в PowerShell: `Copy-Item backend/.env.example backend/.env`; в bash: `cp backend/.env.example backend/.env`)
+- `cp backend/.env.example backend/.env` (Windows: `Copy-Item backend/.env.example backend/.env`)
+- откройте `backend/.env` и заполните почту по комментариям в файле
 
-Откройте `backend\.env` и заполните почту (см. раздел «Почта» ниже). Без ключей форма вернёт понятную ошибку.
-
-**Один терминал — сразу сайт и API** (прокси Angular сам подставляет `/api` на порт 3000):
+**Один терминал — сайт и API:**
 
 ```bash
 npm run dev
 ```
 
-Откройте в браузере: **http://localhost:4200**  
-Health API: **http://localhost:3000/api/health**
+Откройте **http://localhost:4200** · Health API: **http://localhost:3000/api/health**
 
-Если удобнее два окна терминала:
+Два терминала: `npm run dev:api` и `npm run dev:web`.
 
-```bash
-npm run dev:api
-```
+Сборка фронта: `npm run build`.
 
-```bash
-npm run dev:web
-```
-
-Сборка только фронта: `npm run build`.
-
-### Собрать всё в один процесс (для демо без второго порта фронта)
+### Один порт (как на хостинге)
 
 ```bash
 npm run build
-# Windows (cmd/PowerShell):
-set SERVE_STATIC=true
-# macOS / Linux:
-# export SERVE_STATIC=true
+# Windows: set SERVE_STATIC=true
+# macOS/Linux: export SERVE_STATIC=true
 npm run start:api
 ```
 
-Тогда откройте **http://localhost:3000** (раздаётся уже собранный Angular из `frontend/dist`).
+Сайт: **http://localhost:3000**
 
 ---
 
 ## Почта (кратко)
 
-1. **Resend + свой домен** — оба письма через Resend: [resend.com/domains](https://resend.com/domains), затем `RESEND_FROM` с вашего домена.
-2. **Resend + SMTP** — заявка через Resend на `OWNER_EMAIL`, копия заявителю через `SMTP_*` (Gmail с паролем приложения или [Brevo](https://www.brevo.com) `smtp-relay.brevo.com`).
-3. Только **SMTP** — заполните `SMTP_*` и `OWNER_EMAIL`, без `RESEND_API_KEY`.
-4. Локально без отправки: `EMAIL_DEV_MOCK=true` в `backend/.env`.
+1. **Resend + домен** — [resend.com/domains](https://resend.com/domains), затем `RESEND_FROM` с вашего домена.
+2. **Resend + SMTP** — заявка через Resend, копия заявителю через `SMTP_*` (Gmail с паролем приложения или [Brevo](https://www.brevo.com)).
+3. Только **SMTP** — без Resend, поля в `backend/.env.example`.
+4. Отладка без отправки: `EMAIL_DEV_MOCK=true` в `backend/.env`.
 
 Подробные переменные — в `backend/.env.example`.
 
@@ -72,7 +59,7 @@ npm run start:api
 
 ## Что сделано вручную и что с нейросетью
 
-**Моя основная работа:** структура проекта, Angular-лендинг (вёрстка, секции, формы, состояния), Node.js API (маршруты, валидация, ошибки), интеграция почты (Resend + SMTP, сценарии копии), сценарии и тексты на сайте, README и настройка под проверку.
+**Моя основная работа:** структура проекта, Angular-лендинг (вёрстка, секции, формы, состояния), Node.js API (маршруты, валидация, ошибки), интеграция почты (Resend + SMTP), сценарии и тексты на сайте, README.
 
 **Нейросеть (Cursor / ассистент):** ускоряла типовые правки, подсказки по коду и рефакторинг, черновики формулировок, разбор ошибок сборки и почты. Архитектуру, требования к ТЗ, финальные формулировки и ответственность за результат — **автор**, не модель.
 

@@ -1,7 +1,11 @@
 node_modules/
 dist/
 .angular/
+# Секреты только на машине / в панели хостинга, никогда в git:
 .env
+.env.*
+!**/.env.example
+backend/.env
 *.log
 .DS_Store
 Thumbs.db

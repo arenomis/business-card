@@ -14,14 +14,38 @@ import { aiRouter } from './routes/ai.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '..', '.env'), override: true });
+// override: false — переменные с хостинга (Render) не перезатираются пустыми ключами из .env
+dotenv.config({ path: path.join(__dirname, '..', '.env'), override: false });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:4200';
+const serveStatic = process.env.SERVE_STATIC === 'true';
 
-app.use(helmet());
-app.use(cors({ origin: CORS_ORIGIN, methods: ['GET', 'POST'] }));
+// За reverse proxy (Render, Railway, nginx) — корректный IP и rate-limit.
+if (serveStatic || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
+// В проде Angular отдаётся с этого же Express — дефолтный CSP Helmet ломает стили/обработчики SPA.
+if (serveStatic) {
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+} else {
+  app.use(helmet());
+}
+// Один процесс (Angular + API): браузер и так на том же origin — отражаем Origin.
+// Dev (4200 → 3000): нужен явный CORS_ORIGIN.
+app.use(
+  cors({
+    origin: serveStatic ? true : CORS_ORIGIN,
+    methods: ['GET', 'POST'],
+  }),
+);
 app.use(express.json({ limit: '16kb' }));
 
 const limiter = rateLimit({
@@ -41,7 +65,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/contact', contactRouter);
 app.use('/api/ai', aiRouter);
 
-if (process.env.SERVE_STATIC === 'true') {
+if (serveStatic) {
   const staticPath = path.resolve(__dirname, '../../frontend/dist/frontend/browser');
   app.use(express.static(staticPath));
   app.get('*', (_req, res) => {
