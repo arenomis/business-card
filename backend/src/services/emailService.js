@@ -114,6 +114,20 @@ async function sendApplicantCopyOnlyViaSmtp(data) {
   });
 }
 
+/** Отложенная копия заявителю — не блокирует HTTP-ответ (лимит Render ~30 с). */
+function scheduleApplicantCopyViaSmtp(data) {
+  const run = () => {
+    sendApplicantCopyOnlyViaSmtp(data).catch((e) => {
+      console.error('[mail] отложенная копия заявителю:', e?.message || e);
+    });
+  };
+  if (typeof setImmediate !== 'undefined') {
+    setImmediate(run);
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
 /** Отправка через Resend — один API-ключ, без SMTP-пароля почты (удобно для Gmail). */
 async function sendViaResend(data) {
   const apiKey = trimEnv(process.env.RESEND_API_KEY);
@@ -185,21 +199,10 @@ async function sendViaResend(data) {
     return { mocked: false, transport: 'resend' };
   }
 
-  // Копию заявителю — через SMTP: Resend с onboarding@resend.dev на чужие ящики не шлёт.
+  // Копию заявителю — через SMTP в фоне, иначе Resend+SMTP часто не укладываются в лимит Render (~30 с) → 502.
   if (isSmtpConfigured()) {
-    try {
-      await sendApplicantCopyOnlyViaSmtp(data);
-      return { mocked: false, transport: 'resend' };
-    } catch (e) {
-      const detail = e instanceof AppError ? e.message : String(e.message || e);
-      console.error('[mail] копия заявителю через SMTP не ушла:', detail);
-      return {
-        mocked: false,
-        transport: 'resend',
-        applicantCopyFailed: true,
-        applicantCopyError: detail,
-      };
-    }
+    scheduleApplicantCopyViaSmtp(data);
+    return { mocked: false, transport: 'resend', applicantCopyDeferred: true };
   }
 
   try {
@@ -211,19 +214,8 @@ async function sendViaResend(data) {
     );
   } catch (err) {
     if (isResendTestingRecipientError(err.message) && isSmtpConfigured()) {
-      try {
-        await sendApplicantCopyOnlyViaSmtp(data);
-        return { mocked: false, transport: 'resend' };
-      } catch (e2) {
-        const detail = e2 instanceof AppError ? e2.message : String(e2.message || e2);
-        console.error('[mail] копия заявителю (fallback SMTP) не ушла:', detail);
-        return {
-          mocked: false,
-          transport: 'resend',
-          applicantCopyFailed: true,
-          applicantCopyError: detail,
-        };
-      }
+      scheduleApplicantCopyViaSmtp(data);
+      return { mocked: false, transport: 'resend', applicantCopyDeferred: true };
     }
     if (isResendTestingRecipientError(err.message)) {
       throw new AppError(

@@ -9,6 +9,9 @@ function buildContactMessage(result) {
       const err = result.applicantCopyError || 'ошибка SMTP';
       return `Заявка доставлена владельцу. Копия на ваш email не отправилась: ${err}. Проверьте «Спам». Владельцу сайта: с сервера часто не работает Gmail — лучше Brevo (smtp-relay.brevo.com) или свой домен в Resend.`;
     }
+    if (result.applicantCopyDeferred) {
+      return 'Заявка отправлена владельцу. Копия на ваш email уходит вторым письмом — проверьте «Входящие» и «Спам» через 1–2 минуты.';
+    }
     return 'Сообщение отправлено. Письмо с заявкой — владельцу, копия — на указанный вами email. Проверьте «Входящие» и «Спам».';
   }
   if (result.mocked && result.transport === 'console') {
@@ -30,6 +33,7 @@ contactRouter.post('/', async (req, res, next) => {
       ethereal: Boolean(result.ethereal),
       transport: result.transport,
       applicantCopyFailed: Boolean(result.applicantCopyFailed),
+      applicantCopyDeferred: Boolean(result.applicantCopyDeferred),
       message: buildContactMessage(result),
     });
   } catch (err) {

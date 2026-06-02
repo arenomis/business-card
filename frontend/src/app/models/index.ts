@@ -12,6 +12,7 @@ export interface ContactResponse {
   ethereal?: boolean;
   transport?: string;
   applicantCopyFailed?: boolean;
+  applicantCopyDeferred?: boolean;
   details?: { field: string; message: string }[];
 }
 
