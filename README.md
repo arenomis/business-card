@@ -33,6 +33,8 @@ npm run dev
 
 Сборка фронта: `npm run build`.
 
+Проверка API (моки Resend + SMTP, без реальной почты): `npm run test:api`.
+
 ### Один порт (как на хостинге)
 
 ```bash

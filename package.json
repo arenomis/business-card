@@ -9,7 +9,8 @@
     "dev:api": "npm run dev --prefix backend",
     "dev:web": "npm start --prefix frontend",
     "build": "npm run build --prefix frontend",
-    "start:api": "npm start --prefix backend"
+    "start:api": "npm start --prefix backend",
+    "test:api": "npm test --prefix backend"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
