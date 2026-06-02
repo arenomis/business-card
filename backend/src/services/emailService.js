@@ -75,14 +75,16 @@ function createTransporter() {
     requireTLS: trimEnv(process.env.SMTP_SECURE) !== 'true',
     auth: { user, pass },
     tls: { rejectUnauthorized: true },
-    connectionTimeout: 15_000,
-    greetingTimeout: 15_000,
-    socketTimeout: 25_000,
+    connectionTimeout: 6_000,
+    greetingTimeout: 6_000,
+    socketTimeout: 8_000,
   });
 }
 
 /** Копия заявителю через SMTP (любой получатель), пока Resend на тестовом from. */
 async function sendApplicantCopyOnlyViaSmtp(data) {
+  const host = trimEnv(process.env.SMTP_HOST);
+  console.info(`[mail] копия заявителю через SMTP host=${host || '(нет)'} → ${String(data.email || '').slice(0, 3)}…`);
   const transporter = createTransporter();
   if (!transporter) {
     throw new AppError(
@@ -128,7 +130,7 @@ async function sendViaResend(data) {
   }
 
   const sendOne = async (to, subject, html, replyTo) => {
-    const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 20_000;
+    const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 10_000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ms);
     let res;

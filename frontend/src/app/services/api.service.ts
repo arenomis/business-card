@@ -12,7 +12,7 @@ export class ApiService {
 
   sendContact(data: ContactFormData): Observable<ContactResponse> {
     return this.http.post<ContactResponse>(`${this.baseUrl}/contact`, data).pipe(
-      timeout(45_000),
+      timeout(32_000),
       catchError((err: unknown) => {
         if (err instanceof TimeoutError) {
           return throwError(() => ({
@@ -33,9 +33,18 @@ export class ApiService {
   }
 
   askAi(question: string): Observable<AiResponse> {
-    return this.http
-      .post<AiResponse>(`${this.baseUrl}/ai/ask`, { question })
-      .pipe(catchError(this.handleError));
+    return this.http.post<AiResponse>(`${this.baseUrl}/ai/ask`, { question }).pipe(
+      timeout(28_000),
+      catchError((err: unknown) => {
+        if (err instanceof TimeoutError) {
+          return throwError(() => ({
+            message: 'Ответ ассистента слишком долго ждём (таймаут). Попробуйте короче вопрос или повторите.',
+            status: 0,
+          }));
+        }
+        return this.handleError(err as HttpErrorResponse);
+      }),
+    );
   }
 
   private handleError(error: HttpErrorResponse): Observable<never> {
@@ -47,6 +56,9 @@ export class ApiService {
       message = 'Нет соединения с сервером. Проверьте, что API запущен.';
     } else if (error.status === 429) {
       message = 'Слишком много запросов. Подождите немного.';
+    } else if (error.status === 502) {
+      message =
+        'Шлюз вернул 502: сервер не успел за отведённое время (часто Render ~30 с). Уже исправляется на стороне API — обновите страницу после деплоя.';
     }
 
     return throwError(() => ({

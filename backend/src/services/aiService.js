@@ -5,9 +5,15 @@ function trimEnv(v) {
 }
 
 function getOllamaConfig() {
-  const enabled = trimEnv(process.env.AI_USE_OLLAMA) !== 'false';
   const baseUrl = trimEnv(process.env.OLLAMA_BASE_URL) || 'http://localhost:11434';
   const model = trimEnv(process.env.OLLAMA_MODEL) || 'llama3.2:3b';
+  let enabled = trimEnv(process.env.AI_USE_OLLAMA) !== 'false';
+  // На Render localhost:11434 — не ваш ПК; fetch висит до минут → 502 у прокси. Отключаем такой Ollama.
+  const onRender = trimEnv(process.env.RENDER) === 'true';
+  const localOllama = /localhost|127\.0\.0\.1/i.test(baseUrl);
+  if (onRender && localOllama) {
+    enabled = false;
+  }
   return { enabled, baseUrl, model };
 }
 
@@ -47,7 +53,20 @@ async function askPollinations(question) {
 
   const prompt = buildPrompt(question);
   const url = `https://text.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
-  const response = await fetch(url);
+  const ms = Number(process.env.AI_POLLINATIONS_TIMEOUT_MS) || 18_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  let response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`Pollinations: нет ответа за ${ms} мс`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     throw new Error(`Pollinations HTTP ${response.status}`);
   }
@@ -67,18 +86,32 @@ async function askOllama(question) {
   const { enabled, baseUrl, model } = getOllamaConfig();
   if (!enabled) return null;
 
-  const response = await fetch(`${baseUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt: buildPrompt(question),
-      stream: false,
-      options: {
-        temperature: 0.3,
-      },
-    }),
-  });
+  const ms = Number(process.env.AI_OLLAMA_TIMEOUT_MS) || 8_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt: buildPrompt(question),
+        stream: false,
+        options: {
+          temperature: 0.3,
+        },
+      }),
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`Ollama: нет ответа за ${ms} мс`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     throw new Error(`Ollama HTTP ${response.status}`);
@@ -103,14 +136,17 @@ async function askOllama(question) {
 export function getAiStatusSnapshot() {
   const { enabled, model } = getOllamaConfig();
   const pollinationsEnabled = trimEnv(process.env.AI_USE_POLLINATIONS) !== 'false';
+  const chain = pollinationsEnabled
+    ? enabled
+      ? 'pollinations+ollama+fallback'
+      : 'pollinations+fallback'
+    : enabled
+    ? 'ollama+fallback'
+    : 'resume-assistant';
   return {
     assistantReady: true,
     llmConfigured: true,
-    llmProvider: pollinationsEnabled
-      ? 'pollinations+ollama+fallback'
-      : enabled
-      ? 'ollama+fallback'
-      : 'resume-assistant',
+    llmProvider: chain,
     model: pollinationsEnabled ? 'pollinations-text' : enabled ? model : 'resume-assistant',
     openaiConfigured: false,
   };
