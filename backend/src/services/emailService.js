@@ -67,6 +67,21 @@ function isSmtpConfigured() {
   );
 }
 
+/**
+ * Поле From для nodemailer.
+ * У Brevo логин SMTP — *@smtp-brevo.com; в «От» нужен подтверждённый в панели Brevo адрес (обычно OWNER_EMAIL), иначе часто 550.
+ */
+function resolveSmtpFromAddress(ownerName, ownerEmail, smtpUser) {
+  const fromRaw = trimEnv(process.env.SMTP_FROM);
+  if (fromRaw) return fromRaw;
+  const user = trimEnv(smtpUser);
+  const replyAddr = trimEnv(ownerEmail) || user;
+  if (/@smtp-brevo\.com$/i.test(user)) {
+    return `"${ownerName}" <${replyAddr}>`;
+  }
+  return `"${ownerName}" <${user}>`;
+}
+
 /** Текст для заявителя в API (без дублирования «проверьте спам» там, где дело в сети/хостинге). */
 function humanizeApplicantSmtpErrorForClient(raw) {
   const s = String(raw || '');
@@ -135,8 +150,7 @@ async function sendApplicantCopyOnlyViaSmtp(data) {
   const ownerEmail = trimEnv(process.env.OWNER_EMAIL) || trimEnv(process.env.SMTP_USER);
   const ownerName = trimEnv(process.env.OWNER_NAME) || 'Site Owner';
   const smtpUser = trimEnv(process.env.SMTP_USER);
-  const fromRaw = trimEnv(process.env.SMTP_FROM);
-  const fromAddress = fromRaw || `"${ownerName}" <${smtpUser}>`;
+  const fromAddress = resolveSmtpFromAddress(ownerName, ownerEmail, smtpUser);
 
   if (overrideTo && overrideTo.toLowerCase() !== trimEnv(data.email).toLowerCase()) {
     console.warn(`[mail] копия на override ${to} (в форме указали: ${data.email})`);
@@ -344,8 +358,7 @@ async function sendViaSmtp(data) {
   const ownerEmail = trimEnv(process.env.OWNER_EMAIL) || trimEnv(process.env.SMTP_USER);
   const ownerName = trimEnv(process.env.OWNER_NAME) || 'Site Owner';
   const smtpUser = trimEnv(process.env.SMTP_USER);
-  const fromRaw = trimEnv(process.env.SMTP_FROM);
-  const fromAddress = fromRaw || `"${ownerName}" <${smtpUser}>`;
+  const fromAddress = resolveSmtpFromAddress(ownerName, ownerEmail, smtpUser);
 
   // Без verify() — быстрее и ниже риск таймаута Render (~30 с на весь запрос).
   const ownerMail = {
