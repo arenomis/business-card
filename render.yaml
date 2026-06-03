@@ -1,0 +1,28 @@
+# Render Blueprint: один Web Service — Angular (статика) + Node API.
+# Подключите репозиторий в Render → New → Blueprint или укажите те же команды вручную в Settings.
+# Секреты (RESEND_API_KEY, SMTP_*, OWNER_EMAIL, CORS_ORIGIN) — только в Environment панели Render.
+
+services:
+  - type: web
+    name: business-card
+    runtime: node
+    plan: free
+    buildCommand: npm run build:render
+    startCommand: npm run start:render
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SERVE_STATIC
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: RENDER
+        value: "true"
+      - key: AI_USE_OLLAMA
+        value: "false"
+      - key: AI_USE_POLLINATIONS
+        value: "true"
+      # Замените на URL вашего сервиса Render, например https://business-card-vedq.onrender.com
+      - key: CORS_ORIGIN
+        sync: false

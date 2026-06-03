@@ -57,6 +57,18 @@ npm run start:api
 
 ---
 
+## Деплой на Render
+
+1. Репозиторий: [github.com/arenomis/business-card](https://github.com/arenomis/business-card) → Render → **New Web Service** (или **Blueprint** из `render.yaml`).
+2. **Build Command:** `npm run build:render`  
+   **Start Command:** `npm run start:render`  
+   В **Environment** обязательно: `SERVE_STATIC=true`, `CORS_ORIGIN=https://ваш-сервис.onrender.com`, `RESEND_API_KEY`, `OWNER_EMAIL`, `SMTP_*` (лучше Brevo на проде).
+3. Каждый `git push` в `master` запускает автодеплой, если включён **Auto-Deploy**.
+
+Прод-пример: **https://business-card-vedq.onrender.com**
+
+---
+
 ## Почта (кратко)
 
 1. **Resend + домен** — [resend.com/domains](https://resend.com/domains), затем `RESEND_FROM` с вашего домена.

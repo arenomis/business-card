@@ -9,7 +9,9 @@
     "dev:api": "npm run dev --prefix backend",
     "dev:web": "npm start --prefix frontend",
     "build": "npm run build --prefix frontend",
+    "build:render": "npm run install:all && npm run build",
     "start:api": "npm start --prefix backend",
+    "start:render": "npm run start:api",
     "test:api": "npm test --prefix backend"
   },
   "devDependencies": {
