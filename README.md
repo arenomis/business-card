@@ -38,6 +38,13 @@ npm run dev
 
 Откройте **http://localhost:4200** · Health API: **http://localhost:3000/api/health**
 
+**Если локально «перестало работать» (форма, почта):**
+
+1. Запущен ли проект: `npm run dev` или `start-dev.bat` (порты **3000** и **4200**).
+2. В **`backend/.env` не должно быть `RENDER=true`** — эту переменную на Render выставляет хостинг. Если скопировали env с панели Render, **удалите строку `RENDER=true`** из локального `.env`, иначе копия через Gmail обрабатывается как в облаке (пропуск SMTP).
+3. **`CORS_ORIGIN=http://localhost:4200`**, если фронт на :4200.
+4. Проверка API без реальной почты: `npm run test:api`.
+
 Два терминала: `npm run dev:api` и `npm run dev:web`.
 
 Сборка фронта: `npm run build`.
