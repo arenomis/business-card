@@ -27,6 +27,15 @@ npm run install:all
 npm run dev
 ```
 
+**Если терминал в Cursor не запускает команды:** дважды щёлкните **`start-dev.bat`** в корне репозитория (откроется окно cmd) или в PowerShell:
+
+```powershell
+cd D:\jobProj\testJob
+npm run dev
+```
+
+(В старом PowerShell не используйте `&&` — только `;` или две строки.)
+
 Откройте **http://localhost:4200** · Health API: **http://localhost:3000/api/health**
 
 Два терминала: `npm run dev:api` и `npm run dev:web`.
