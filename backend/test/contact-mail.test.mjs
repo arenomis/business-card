@@ -94,6 +94,52 @@ describe('sendContactEmails (Resend + SMTP applicant)', () => {
   });
 });
 
+describe('Render + smtp.gmail.com', () => {
+  test('не вызывает sendMail — сразу SKIP и applicantCopyFailed', async () => {
+    let sendMailCalls = 0;
+    nodemailer.createTransport = () => ({
+      sendMail: async () => {
+        sendMailCalls++;
+        return { messageId: 'x' };
+      },
+    });
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes('api.resend.com')) {
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      return origFetch(url, init);
+    };
+
+    try {
+      process.env.RESEND_API_KEY = 're_test_mock_key_for_ci';
+      process.env.RESEND_FROM = 'Test <onboarding@resend.dev>';
+      process.env.OWNER_EMAIL = 'owner@example.com';
+      process.env.SMTP_HOST = 'smtp.gmail.com';
+      process.env.SMTP_USER = 'u@gmail.com';
+      process.env.SMTP_PASS = '1234567890';
+      process.env.SMTP_PORT = '587';
+      process.env.RENDER = 'true';
+      delete process.env.SMTP_ALLOW_GMAIL_ON_RENDER;
+
+      const { sendContactEmails } = await import('../src/services/emailService.js');
+      const result = await sendContactEmails({
+        name: 'Иван',
+        surname: 'Петров',
+        email: 'guest@example.com',
+        comment: '1234567890комментарий',
+      });
+
+      assert.equal(sendMailCalls, 0);
+      assert.equal(result.applicantCopyFailed, true);
+      assert.match(String(result.applicantCopyError || ''), /Render|Brevo|smtp-relay/i);
+    } finally {
+      delete process.env.RENDER;
+      restoreMailMocks();
+      installMailMocks({ smtpFail: false });
+    }
+  });
+});
+
 describe('POST /api/contact', () => {
   test('200 JSON и нет зависания при успешных моках', async () => {
     installMailMocks({ smtpFail: false });

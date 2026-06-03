@@ -19,6 +19,7 @@ services:
         value: "true"
       - key: RENDER
         value: "true"
+      # На Render не задавайте SMTP_HOST=smtp.gmail.com — копия не дойдёт. Используйте smtp-relay.brevo.com (см. README).
       - key: AI_USE_OLLAMA
         value: "false"
       - key: AI_USE_POLLINATIONS

@@ -70,6 +70,9 @@ function isSmtpConfigured() {
 /** Текст для заявителя в API (без дублирования «проверьте спам» там, где дело в сети/хостинге). */
 function humanizeApplicantSmtpErrorForClient(raw) {
   const s = String(raw || '');
+  if (/GMAIL_SMTP_BLOCKED_ON_RENDER/i.test(s)) {
+    return 'на Render нельзя использовать smtp.gmail.com для копии — Google не принимает соединения с датацентров. Владельцу сайта: в панели Render задайте Brevo — SMTP_HOST=smtp-relay.brevo.com, SMTP_USER и SMTP_PASS из brevo.com → SMTP & API; либо подтвердите домен в resend.com.';
+  }
   if (/connection timeout|connect timeout|timed out|ETIMEDOUT|timeout/i.test(s)) {
     const gmail = /gmail\.com/i.test(trimEnv(process.env.SMTP_HOST) || '');
     if (gmail) {
@@ -192,6 +195,23 @@ async function notifyOwnerApplicantCopySmtpFailed(data, reason) {
 
 /** Копия заявителю по SMTP в том же запросе (надёжнее, чем фон после HTTP). Таймаут — чтобы не висеть вечно и не ловить 502 на Render. */
 async function trySendApplicantCopyViaSmtp(data) {
+  const host = trimEnv(process.env.SMTP_HOST);
+  if (
+    trimEnv(process.env.RENDER) === 'true' &&
+    /gmail\.com/i.test(host) &&
+    trimEnv(process.env.SMTP_ALLOW_GMAIL_ON_RENDER) !== 'true'
+  ) {
+    const raw =
+      'GMAIL_SMTP_BLOCKED_ON_RENDER: smtp.gmail.com с IP Render не подключается (Connection timeout). Задайте Brevo smtp-relay.brevo.com в Environment.';
+    console.error('[mail] applicant copy SKIP (Gmail+Render) →', data.email);
+    try {
+      await notifyOwnerApplicantCopySmtpFailed(data, raw);
+    } catch (e2) {
+      console.error('[mail] Resend alert to owner failed:', e2?.message || e2);
+    }
+    return { ok: false, error: humanizeApplicantSmtpErrorForClient(raw) };
+  }
+
   const ms = Number(process.env.SMTP_APPLICANT_COPY_TIMEOUT_MS) || 48_000;
   let timer;
   const deadline = new Promise((_, reject) => {
