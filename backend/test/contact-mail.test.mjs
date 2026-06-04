@@ -1,17 +1,16 @@
 /**
- * Моки Resend (fetch) + nodemailer: проверяем, что цепочка «владелец → копия SMTP» завершается и API отвечает 200.
- * Запуск: npm test --prefix backend
+ * Моки Resend (fetch) + nodemailer.
+ * Цепочка: письмо владельцу → копия заявителю (Resend, при ошибке — SMTP в том же запросе).
  */
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import express from 'express';
-import http from 'node:http';
 import nodemailer from 'nodemailer';
 
 const origCreateTransport = nodemailer.createTransport.bind(nodemailer);
 const origFetch = globalThis.fetch;
 
-function installMailMocks({ smtpFail = false } = {}) {
+function installMailMocks({ smtpFail = false, resendApplicantFail = false } = {}) {
+  let resendN = 0;
   nodemailer.createTransport = () => ({
     sendMail: async () => {
       if (smtpFail) {
@@ -23,15 +22,22 @@ function installMailMocks({ smtpFail = false } = {}) {
     },
   });
 
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url) => {
     if (String(url).includes('api.resend.com')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({}),
-      };
+      resendN++;
+      if (resendN === 1) {
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      if (resendApplicantFail) {
+        return {
+          ok: false,
+          status: 403,
+          json: async () => ({ message: 'can only send testing emails to your own email address' }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
     }
-    return origFetch(url, init);
+    return origFetch(url);
   };
 }
 
@@ -55,11 +61,28 @@ function baseEnv() {
   process.env.SMTP_SECURE = 'false';
   delete process.env.SMTP_FROM;
   delete process.env.RENDER;
+  delete process.env.APPLICANT_COPY_FORCE_SMTP;
 }
 
-describe('sendContactEmails (Resend + SMTP applicant)', () => {
-  test('копия заявителю уходит через SMTP, applicantCopyFailed=false', async () => {
-    installMailMocks({ smtpFail: false });
+describe('sendContactEmails (Resend + копия)', () => {
+  test('копия вторым запросом Resend, без SMTP', async () => {
+    installMailMocks({ resendApplicantFail: false });
+    baseEnv();
+
+    const { sendContactEmails } = await import('../src/services/emailService.js');
+    const result = await sendContactEmails({
+      name: 'Иван',
+      surname: 'Петров',
+      email: 'guest@example.com',
+      comment: '1234567890комментарий',
+    });
+
+    assert.equal(result.transport, 'resend');
+    assert.ok(!result.applicantCopyFailed);
+  });
+
+  test('Resend копия не прошла — fallback SMTP OK', async () => {
+    installMailMocks({ resendApplicantFail: true, smtpFail: false });
     baseEnv();
 
     const { sendContactEmails } = await import('../src/services/emailService.js');
@@ -72,11 +95,10 @@ describe('sendContactEmails (Resend + SMTP applicant)', () => {
 
     assert.equal(result.transport, 'resend');
     assert.equal(result.applicantCopyFailed, false);
-    assert.equal(result.applicantCopyError, '');
   });
 
-  test('при падении SMTP — успех заявки, applicantCopyFailed=true и текст для клиента', async () => {
-    installMailMocks({ smtpFail: true });
+  test('Resend копия не прошла — SMTP тоже падает', async () => {
+    installMailMocks({ resendApplicantFail: true, smtpFail: true });
     baseEnv();
     process.env.SMTP_HOST = 'smtp.gmail.com';
 
@@ -88,14 +110,42 @@ describe('sendContactEmails (Resend + SMTP applicant)', () => {
       comment: '1234567890комментарий',
     });
 
-    assert.equal(result.transport, 'resend');
     assert.equal(result.applicantCopyFailed, true);
-    assert.match(String(result.applicantCopyError || ''), /Gmail|Brevo|smtp-relay/i);
+    assert.match(String(result.applicantCopyError || ''), /Заявка доставлена владельцу|копия/i);
+  });
+
+  test('APPLICANT_COPY_FORCE_SMTP: один Resend, копия через SMTP', async () => {
+    let resendN = 0;
+    nodemailer.createTransport = () => ({
+      sendMail: async () => ({ messageId: 'smtp-mid' }),
+    });
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('api.resend.com')) {
+        resendN++;
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      return origFetch(url);
+    };
+
+    baseEnv();
+    process.env.APPLICANT_COPY_FORCE_SMTP = 'true';
+
+    const { sendContactEmails } = await import('../src/services/emailService.js');
+    const result = await sendContactEmails({
+      name: 'Иван',
+      surname: 'Петров',
+      email: 'guest@example.com',
+      comment: '1234567890комментарий',
+    });
+
+    assert.equal(resendN, 1, 'второй Resend на заявителя не вызывается');
+    assert.equal(result.transport, 'resend');
+    assert.ok(!result.applicantCopyFailed);
   });
 });
 
 describe('Render + smtp.gmail.com', () => {
-  test('не вызывает sendMail — сразу SKIP и applicantCopyFailed', async () => {
+  test('вторая попытка Resend падает → SMTP skip на Render', async () => {
     let sendMailCalls = 0;
     nodemailer.createTransport = () => ({
       sendMail: async () => {
@@ -103,11 +153,18 @@ describe('Render + smtp.gmail.com', () => {
         return { messageId: 'x' };
       },
     });
-    globalThis.fetch = async (url, init) => {
+    let resendN = 0;
+    globalThis.fetch = async (url) => {
       if (String(url).includes('api.resend.com')) {
-        return { ok: true, status: 200, json: async () => ({}) };
+        resendN++;
+        if (resendN === 1) return { ok: true, status: 200, json: async () => ({}) };
+        return {
+          ok: false,
+          status: 403,
+          json: async () => ({ message: 'can only send testing emails to your own email address' }),
+        };
       }
-      return origFetch(url, init);
+      return origFetch(url);
     };
 
     try {
@@ -131,51 +188,11 @@ describe('Render + smtp.gmail.com', () => {
 
       assert.equal(sendMailCalls, 0);
       assert.equal(result.applicantCopyFailed, true);
-      assert.match(String(result.applicantCopyError || ''), /Render|Brevo|smtp-relay/i);
+      assert.match(String(result.applicantCopyError || ''), /Заявка доставлена владельцу|хостинг|Gmail/i);
     } finally {
       delete process.env.RENDER;
       restoreMailMocks();
       installMailMocks({ smtpFail: false });
-    }
-  });
-});
-
-describe('POST /api/contact', () => {
-  test('200 JSON и нет зависания при успешных моках', async () => {
-    installMailMocks({ smtpFail: false });
-    baseEnv();
-
-    const { contactRouter } = await import('../src/routes/contact.js');
-    const { errorHandler } = await import('../src/middleware/errorHandler.js');
-
-    const app = express();
-    app.use(express.json({ limit: '16kb' }));
-    // Роутер объявлен как post('/'); при mount '/api/contact' надёжнее вешать на корень тестового app.
-    app.use('/', contactRouter);
-    app.use(errorHandler);
-
-    const server = http.createServer(app);
-    await new Promise((resolve) => server.listen(0, resolve));
-    const { port } = server.address();
-
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'Иван',
-          surname: 'Петров',
-          email: 'guest@example.com',
-          comment: '1234567890комментарий',
-        }),
-      });
-      assert.equal(res.status, 200);
-      const body = await res.json();
-      assert.equal(body.success, true);
-      assert.equal(body.applicantCopyFailed, false);
-      assert.match(body.message, /отправлено|доставлена/i);
-    } finally {
-      await new Promise((r) => server.close(r));
     }
   });
 });

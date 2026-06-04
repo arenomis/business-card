@@ -82,23 +82,31 @@ function resolveSmtpFromAddress(ownerName, ownerEmail, smtpUser) {
   return `"${ownerName}" <${user}>`;
 }
 
-/** Текст для заявителя в API (без дублирования «проверьте спам» там, где дело в сети/хостинге). */
+/** Короткий текст для заявителя; подробности — в логах и в письме владельцу (raw). */
 function humanizeApplicantSmtpErrorForClient(raw) {
   const s = String(raw || '');
   if (/GMAIL_SMTP_BLOCKED_ON_RENDER/i.test(s)) {
-    return 'на Render нельзя использовать smtp.gmail.com для копии — Google не принимает соединения с датацентров. Владельцу сайта: в панели Render задайте Brevo — SMTP_HOST=smtp-relay.brevo.com, SMTP_USER и SMTP_PASS из brevo.com → SMTP & API; либо подтвердите домен в resend.com.';
+    return 'Копия с этого хостинга через Gmail не настраивается. Заявка доставлена владельцу.';
   }
-  if (/connection timeout|connect timeout|timed out|ETIMEDOUT|timeout/i.test(s)) {
-    const gmail = /gmail\.com/i.test(trimEnv(process.env.SMTP_HOST) || '');
-    if (gmail) {
-      return 'не удалось подключиться к Gmail (SMTP) за отведённое время — с облака Google часто блокирует или не отвечает. Владельцу сайта: в Render задайте Brevo — хост smtp-relay.brevo.com, SMTP_USER и SMTP_PASS из раздела SMTP & API в brevo.com; либо подтвердите домен в resend.com и RESEND_FROM с этого домена.';
-    }
-    return 'таймаут при подключении к SMTP. Проверьте SMTP_HOST, порт и файрвол; для продакшена удобнее Brevo (smtp-relay.brevo.com).';
+  if (/535|authentication failed|invalid login|5\.7\.8|535 5\.7\.8/i.test(s)) {
+    return 'Копия не отправлена из‑за настройки почты на стороне сайта. Заявка доставлена владельцу.';
+  }
+  if (/550|553|not allowed to send|sender is not verified|5\.1\.7|5\.7\.1/i.test(s)) {
+    return 'Копия не отправлена из‑за настройки почты на стороне сайта. Заявка доставлена владельцу.';
+  }
+  if (/SMTP: таймаут|connection timeout|connect timeout|timed out|ETIMEDOUT|timeout|таймаут/i.test(s)) {
+    return 'Копия не успела уйти на ваш адрес (почтовый сервер не ответил вовремя). Заявка доставлена владельцу.';
   }
   if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(s)) {
-    return 'почтовый сервер SMTP недоступен по сети. Проверьте SMTP_HOST и DNS.';
+    return 'Копия не отправлена — не удалось связаться с почтовым сервером. Заявка доставлена владельцу.';
   }
   return s;
+}
+
+function smtpSendErrorText(err) {
+  if (!err || typeof err !== 'object') return String(err || '');
+  const parts = [err.message, err.response, err.responseCode].filter(Boolean);
+  return parts.join(' ');
 }
 
 let warnedGmailSmtpFromCloud = false;
@@ -120,6 +128,7 @@ function createTransporter() {
     );
   }
 
+  const forceIpv4 = trimEnv(process.env.SMTP_FORCE_IPV4) === 'true';
   return nodemailer.createTransport({
     host,
     port: Number(process.env.SMTP_PORT) || 587,
@@ -127,6 +136,7 @@ function createTransporter() {
     requireTLS: trimEnv(process.env.SMTP_SECURE) !== 'true',
     auth: { user, pass },
     tls: { rejectUnauthorized: true },
+    ...(forceIpv4 ? { family: 4 } : {}),
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 25_000,
     greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 25_000,
     socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 40_000,
@@ -176,9 +186,9 @@ async function notifyOwnerApplicantCopySmtpFailed(data, reason) {
   const from =
     trimEnv(process.env.RESEND_FROM) || 'Developer Landing <onboarding@resend.dev>';
   const html = `
-    <p>Копия заявителю <strong>${escapeHtml(data.email)}</strong> по SMTP не доставилась.</p>
+    <p>Копия заявителю <strong>${escapeHtml(data.email)}</strong> не ушла.</p>
     <p><strong>Причина:</strong> ${escapeHtml(reason)}</p>
-    <p>Проверьте <code>SMTP_HOST</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code>. С <strong>smtp.gmail.com</strong> с VPS/Render часто не работает — переключитесь на <strong>Brevo</strong> (<code>smtp-relay.brevo.com</code> + SMTP-ключ) или подтвердите домен в Resend. Ответьте заявителю вручную.</p>
+    <p>Проверьте SMTP или Resend+домен. Ответьте заявителю вручную.</p>
   `;
   const ms = Number(process.env.RESEND_FETCH_TIMEOUT_MS) || 8_000;
   const controller = new AbortController();
@@ -226,7 +236,7 @@ async function trySendApplicantCopyViaSmtp(data) {
     return { ok: false, error: humanizeApplicantSmtpErrorForClient(raw) };
   }
 
-  const ms = Number(process.env.SMTP_APPLICANT_COPY_TIMEOUT_MS) || 48_000;
+  const ms = Number(process.env.SMTP_APPLICANT_COPY_TIMEOUT_MS) || 25_000;
   let timer;
   const deadline = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(`SMTP: таймаут ${ms} мс`)), ms);
@@ -235,7 +245,8 @@ async function trySendApplicantCopyViaSmtp(data) {
     await Promise.race([sendApplicantCopyOnlyViaSmtp(data), deadline]);
     return { ok: true };
   } catch (e) {
-    const raw = e instanceof AppError ? e.message : e?.message || String(e);
+    const raw =
+      e instanceof AppError ? e.message : smtpSendErrorText(e) || e?.message || String(e);
     console.error('[mail] applicant copy SMTP FAIL →', data.email, raw);
     try {
       await notifyOwnerApplicantCopySmtpFailed(data, raw);
@@ -319,7 +330,8 @@ async function sendViaResend(data) {
     return { mocked: false, transport: 'resend' };
   }
 
-  if (isSmtpConfigured()) {
+  // Копия сразу через Brevo/SMTP, без второго вызова Resend (если Resend «успешен», а письмо не доходит — включите это).
+  if (trimEnv(process.env.APPLICANT_COPY_FORCE_SMTP) === 'true' && isSmtpConfigured()) {
     const copy = await trySendApplicantCopyViaSmtp(data);
     return {
       mocked: false,
@@ -336,17 +348,25 @@ async function sendViaResend(data) {
       buildUserCopyHtml(data),
       ownerEmail
     );
+    return { mocked: false, transport: 'resend' };
   } catch (err) {
+    if (isSmtpConfigured()) {
+      const copy = await trySendApplicantCopyViaSmtp(data);
+      return {
+        mocked: false,
+        transport: 'resend',
+        applicantCopyFailed: !copy.ok,
+        applicantCopyError: copy.error || '',
+      };
+    }
     if (isResendTestingRecipientError(err.message)) {
       throw new AppError(
-        'Копия на ваш email с тестового Resend (onboarding@resend.dev) недоступна. Сделайте одно: 1) подтвердите домен в https://resend.com/domains и укажите RESEND_FROM с него; 2) либо задайте рабочий SMTP (лучше Brevo: smtp-relay.brevo.com + SMTP-ключ в SMTP_PASS, логин в SMTP_USER по инструкции Brevo).',
+        'Копия на email: с onboarding@resend.dev только на свой ящик. Добавьте SMTP (Brevo) или RESEND_FROM с доменом в Resend.',
         503,
       );
     }
     throw err;
   }
-
-  return { mocked: false, transport: 'resend' };
 }
 
 async function sendViaSmtp(data) {

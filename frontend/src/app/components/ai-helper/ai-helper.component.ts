@@ -22,10 +22,10 @@ export class AiHelperComponent implements OnInit {
   question = '';
 
   readonly suggestions = [
-    'Почему стоит взять тебя на работу?',
-    'Какой у тебя стек?',
-    'Расскажи про проект на ММК',
-    'Что сделал с таблицей лесов?',
+    'Почему его стоит взять на работу?',
+    'Какой у него стек?',
+    'Расскажи про его проект на ММК',
+    'Что он сделал с таблицей лесов?',
   ];
 
   ngOnInit(): void {
@@ -33,7 +33,9 @@ export class AiHelperComponent implements OnInit {
       next: (res) => {
         this.displayModel.set(res.model || 'resume-assistant');
       },
-      error: () => this.displayModel.set('resume-assistant'),
+      error: () => {
+        this.displayModel.set('resume-assistant');
+      },
     });
   }
 

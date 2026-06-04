@@ -8,7 +8,6 @@ function getOllamaConfig() {
   const baseUrl = trimEnv(process.env.OLLAMA_BASE_URL) || 'http://localhost:11434';
   const model = trimEnv(process.env.OLLAMA_MODEL) || 'llama3.2:3b';
   let enabled = trimEnv(process.env.AI_USE_OLLAMA) !== 'false';
-  // На Render localhost:11434 — не ваш ПК; fetch висит до минут → 502 у прокси. Отключаем такой Ollama.
   const onRender = trimEnv(process.env.RENDER) === 'true';
   const localOllama = /localhost|127\.0\.0\.1/i.test(baseUrl);
   if (onRender && localOllama) {
@@ -48,38 +47,52 @@ function normalizeAiAnswer(text) {
     .trim();
 }
 
-async function askPollinations(question) {
-  if (trimEnv(process.env.AI_USE_POLLINATIONS) === 'false') return null;
+async function askGroq(question) {
+  if (trimEnv(process.env.AI_USE_GROQ) === 'false') return null;
+
+  const apiKey = trimEnv(process.env.AI_GROQ_API_KEY) || trimEnv(process.env.GROQ_API_KEY);
+  if (!apiKey) return null;
 
   const prompt = buildPrompt(question);
-  const url = `https://text.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
-  const ms = Number(process.env.AI_POLLINATIONS_TIMEOUT_MS) || 18_000;
+  const base = (trimEnv(process.env.AI_GROQ_BASE_URL) || 'https://api.groq.com/openai/v1').replace(/\/$/, '');
+  const model = trimEnv(process.env.AI_GROQ_MODEL) || 'llama-3.1-8b-instant';
+  const ms = Number(process.env.AI_GROQ_TIMEOUT_MS) || 22_000;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
-  let response;
   try {
-    response = await fetch(url, { signal: controller.signal });
+    const res = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 768,
+      }),
+    });
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`Groq HTTP ${res.status} ${errBody.slice(0, 200)}`);
+    }
+    const data = await res.json().catch(() => ({}));
+    const answer = normalizeAiAnswer(data?.choices?.[0]?.message?.content);
+    if (!answer) {
+      throw new Error('Groq вернул пустой ответ');
+    }
+    return { answer, model, provider: 'groq' };
   } catch (e) {
     if (e.name === 'AbortError') {
-      throw new Error(`Pollinations: нет ответа за ${ms} мс`);
+      throw new Error(`Groq: нет ответа за ${ms} мс`);
     }
     throw e;
   } finally {
     clearTimeout(timer);
   }
-  if (!response.ok) {
-    throw new Error(`Pollinations HTTP ${response.status}`);
-  }
-  const rawText = await response.text();
-  const answer = normalizeAiAnswer(rawText);
-  if (!answer) {
-    throw new Error('Pollinations вернул пустой ответ');
-  }
-  return {
-    answer,
-    model: 'pollinations-text',
-    provider: 'pollinations',
-  };
 }
 
 async function askOllama(question) {
@@ -99,9 +112,7 @@ async function askOllama(question) {
         model,
         prompt: buildPrompt(question),
         stream: false,
-        options: {
-          temperature: 0.3,
-        },
+        options: { temperature: 0.3 },
       }),
     });
   } catch (e) {
@@ -123,56 +134,43 @@ async function askOllama(question) {
     throw new Error('Ollama вернул пустой ответ');
   }
 
-  return {
-    answer,
-    model,
-    provider: 'ollama',
-  };
+  return { answer, model, provider: 'ollama' };
 }
 
-/**
- * Статус для фронта: приоритетно Ollama (бесплатно и локально), fallback — локальный rule-based ассистент.
- */
 export function getAiStatusSnapshot() {
   const { enabled, model } = getOllamaConfig();
-  const pollinationsEnabled = trimEnv(process.env.AI_USE_POLLINATIONS) !== 'false';
-  const chain = pollinationsEnabled
-    ? enabled
-      ? 'pollinations+ollama+fallback'
-      : 'pollinations+fallback'
-    : enabled
-    ? 'ollama+fallback'
-    : 'resume-assistant';
+  const groqKey = Boolean(trimEnv(process.env.AI_GROQ_API_KEY) || trimEnv(process.env.GROQ_API_KEY));
+  const chain = [groqKey && 'groq', enabled && 'ollama', 'шаблон'].filter(Boolean).join(' → ');
   return {
     assistantReady: true,
     llmConfigured: true,
     llmProvider: chain,
-    model: pollinationsEnabled ? 'pollinations-text' : enabled ? model : 'resume-assistant',
+    model: groqKey
+      ? trimEnv(process.env.AI_GROQ_MODEL) || 'llama-3.1-8b-instant'
+      : enabled
+        ? model
+        : 'resume-assistant',
     openaiConfigured: false,
   };
 }
 
-/**
- * Ответ по резюме через доступные AI-провайдеры с fallback.
- */
 export async function askAiHelper(question) {
   try {
-    const llmResult = await askPollinations(question);
-    if (llmResult) return llmResult;
+    const r = await askGroq(question);
+    if (r) return r;
   } catch (err) {
-    console.warn('[AI] Pollinations fallback:', err.message);
+    console.warn('[AI] Groq:', err.message);
   }
 
   try {
-    const llmResult = await askOllama(question);
-    if (llmResult) return llmResult;
+    const r = await askOllama(question);
+    if (r) return r;
   } catch (err) {
-    console.warn('[AI] Ollama fallback:', err.message);
+    console.warn('[AI] Ollama:', err.message);
   }
 
-  const answer = buildResumePitchAnswer(question);
   return {
-    answer,
+    answer: buildResumePitchAnswer(question),
     model: 'resume-assistant',
     provider: 'resume-assistant',
   };

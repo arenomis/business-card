@@ -12,12 +12,12 @@ export class ApiService {
 
   sendContact(data: ContactFormData): Observable<ContactResponse> {
     return this.http.post<ContactResponse>(`${this.baseUrl}/contact`, data).pipe(
-      timeout(62_000),
+      timeout(45_000),
       catchError((err: unknown) => {
         if (err instanceof TimeoutError) {
           return throwError(() => ({
             message:
-              'Сервер слишком долго не ответил. Часто это «зависший» SMTP — проверьте SMTP_HOST, SMTP_USER, SMTP_PASS в настройках API.',
+              'Сервер слишком долго не ответил. Проверьте, что API запущен, и RESEND_API_KEY. После отправки заявки копия может всё равно уйти в фоне — смотрите логи API.',
             status: 0,
           }));
         }

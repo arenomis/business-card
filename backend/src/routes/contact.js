@@ -6,10 +6,10 @@ import { sendContactEmails } from '../services/emailService.js';
 function buildContactMessage(result) {
   if (result.transport === 'resend' || result.transport === 'smtp') {
     if (result.applicantCopyFailed) {
-      const err = result.applicantCopyError || 'ошибка SMTP';
-      return `Заявка доставлена владельцу. Копия на ваш email не отправилась: ${err}`;
+      const err = result.applicantCopyError || 'ошибка доставки копии';
+      return `Заявка ушла владельцу. Копия вам не отправилась: ${err}`;
     }
-    return 'Сообщение отправлено. Письмо с заявкой — владельцу, копия — на указанный вами email. Проверьте «Входящие» и «Спам».';
+    return 'Сообщение отправлено. Письмо владельцу и копия вам — проверьте почту и спам.';
   }
   if (result.mocked && result.transport === 'console') {
     return 'Заявка принята (режим разработки: данные только в консоли API). Для реальной доставки добавьте RESEND_API_KEY или SMTP.';

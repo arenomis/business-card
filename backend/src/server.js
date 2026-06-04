@@ -21,6 +21,11 @@ const envPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath, override: true });
 }
+// Секреты LLM и т.д. без дублирования в .env: backend/.env.local (в git не попадает)
+const envLocalPath = path.join(__dirname, '..', '.env.local');
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath, override: true });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -80,7 +85,7 @@ if (serveStatic) {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
   if (serveStatic) {
     const rk = Boolean(String(process.env.RESEND_API_KEY || '').trim());
@@ -96,3 +101,11 @@ app.listen(PORT, () => {
     });
   }
 });
+
+// Длинные POST (почта): не даём сокету оборваться из-за дефолтных таймаутов Node на части окружений.
+server.keepAliveTimeout = Number(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS) || 120_000;
+server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS) || 125_000;
+if (typeof server.requestTimeout !== 'undefined') {
+  const rt = String(process.env.HTTP_REQUEST_TIMEOUT_MS ?? '').trim();
+  server.requestTimeout = rt === '' || rt === '0' ? 0 : Number(rt) || 120_000;
+}

@@ -22,8 +22,7 @@ services:
       # На Render не задавайте SMTP_HOST=smtp.gmail.com — копия не дойдёт. Используйте smtp-relay.brevo.com (см. README).
       - key: AI_USE_OLLAMA
         value: "false"
-      - key: AI_USE_POLLINATIONS
-        value: "true"
+      # В Environment вручную: AI_GROQ_API_KEY (https://console.groq.com/keys), RESEND_*, SMTP_* (лучше Brevo, не Gmail).
       # Замените на URL вашего сервиса Render, например https://business-card-vedq.onrender.com
       - key: CORS_ORIGIN
         sync: false
